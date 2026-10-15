@@ -1,0 +1,100 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("patient")
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patientProfile       PatientProfile?
+  questionnaireAnswers QuestionnaireAnswer[]
+  medicalHistoryNotes  MedicalHistoryNote[]
+  sharedAccesses       SharedAccess[]
+}
+
+model PatientProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alias     String?
+  sex       String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model QuestionnaireQuestion {
+  id                 String   @id @default(cuid())
+  groupId            Int
+  askLevel           Int      @default(0)
+  dependencyAskLevel Int      @default(0)
+  askGroup           String
+  questionText       String
+  answerType         String
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  questionnaireAnswers QuestionnaireAnswer[]
+
+  @@index([askGroup, groupId])
+}
+
+model QuestionnaireAnswer {
+  id          String   @id @default(cuid())
+  userId      String
+  questionId  String
+  answerValue String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question QuestionnaireQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@index([userId])
+  @@index([questionId])
+}
+
+model MedicalHistoryNote {
+  id        String   @id @default(cuid())
+  userId    String
+  noteType  String
+  noteText  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([noteType])
+  @@unique([userId, noteType], where: raw("\"noteType\" IN ('initial_questionnaire_basic_snapshot', 'initial_questionnaire_complementary_snapshot')"))
+}
+
+model SharedAccess {
+  id          String    @id @default(cuid())
+  ownerUserId String
+  label       String
+  shareToken  String    @unique
+  scope       String    @default("summary")
+  active      Boolean   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([ownerUserId])
+  @@index([shareToken])
+}
