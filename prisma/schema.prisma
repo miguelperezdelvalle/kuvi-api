@@ -17,6 +17,7 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  medications Medication[]
   patientProfile       PatientProfile?
   questionnaireAnswers QuestionnaireAnswer[]
   medicalHistoryNotes  MedicalHistoryNote[]
@@ -97,4 +98,86 @@ model SharedAccess {
 
   @@index([ownerUserId])
   @@index([shareToken])
+}
+
+model Medication {
+  userId String
+  id String
+  name String
+  form String
+  unit String
+  ingredients Json
+  version Int @default(1)
+  stock Decimal @default(0) @db.Decimal(18, 6)
+  stockVersion Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  treatment MedicationTreatment?
+  @@id([userId, id])
+}
+
+model MedicationTreatment {
+  userId String
+  id String
+  doctor String
+  dose Decimal @db.Decimal(18, 6)
+  schedule Json
+  startsAt DateTime?
+  endsAt DateTime?
+  status String @default("active")
+  reminders Boolean @default(true)
+  lowStockDays Int @default(3)
+  lowStockUnits Decimal @default(3) @db.Decimal(18, 6)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  medication Medication @relation(fields: [userId, id], references: [userId, id], onDelete: Restrict)
+  intakes MedicationIntake[]
+  movements MedicationStockMovement[]
+  @@id([userId, id])
+}
+
+model MedicationIntake {
+  userId String
+  id String
+  treatmentId String
+  quantity Decimal? @db.Decimal(18, 6)
+  unit String?
+  scheduledAt DateTime?
+  occurredAt DateTime
+  status String
+  snapshot Json
+  legacy Boolean @default(false)
+  overrideWarning Boolean @default(false)
+  voidedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  treatment MedicationTreatment @relation(fields: [userId, treatmentId], references: [userId, id], onDelete: Restrict)
+  @@id([userId, id])
+  @@index([userId, treatmentId, occurredAt])
+}
+
+model MedicationStockMovement {
+  userId String
+  id String
+  treatmentId String
+  kind String
+  quantity Decimal @db.Decimal(18, 6)
+  balanceAfter Decimal @db.Decimal(18, 6)
+  intakeId String?
+  reason String?
+  occurredAt DateTime
+  createdAt DateTime @default(now())
+  treatment MedicationTreatment @relation(fields: [userId, treatmentId], references: [userId, id], onDelete: Restrict)
+  @@id([userId, id])
+  @@index([userId, treatmentId, createdAt])
+}
+
+model MedicationOperation {
+  userId String
+  id String
+  requestHash String
+  result Json
+  createdAt DateTime @default(now())
+  @@id([userId, id])
 }
