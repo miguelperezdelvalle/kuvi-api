@@ -18,10 +18,111 @@ model User {
   updatedAt    DateTime @updatedAt
 
   medications Medication[]
+  appointments Appointment[] @relation("AppointmentPatient")
+  doctorAppointments Appointment[] @relation("AppointmentDoctor")
+  appointmentEvents AppointmentEvent[]
+  prescriptions Prescription[]
+  appointmentNotes AppointmentClinicalNote[]
   patientProfile       PatientProfile?
   questionnaireAnswers QuestionnaireAnswer[]
   medicalHistoryNotes  MedicalHistoryNote[]
   sharedAccesses       SharedAccess[]
+}
+
+model Appointment {
+  userId String
+  id String
+  doctorId String?
+  doctorName String
+  specialty String
+  start DateTime
+  end DateTime
+  timezone String
+  location String
+  address String @default("")
+  mapUrl String?
+  consultationUrl String?
+  modality String @default("in_person")
+  origin String @default("patient")
+  bookingStatus String @default("recorded")
+  status String @default("scheduled")
+  archivedAt DateTime?
+  reason String @default("")
+  preparation String @default("")
+  patientNotes String @default("")
+  followUpAt DateTime?
+  previousAppointmentId String?
+  reminder24h Boolean @default(true)
+  reminder1h Boolean @default(true)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  patient User @relation("AppointmentPatient", fields: [userId], references: [id], onDelete: Restrict)
+  doctor User? @relation("AppointmentDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  previous Appointment? @relation("AppointmentFollowUp", fields: [userId, previousAppointmentId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  followUps Appointment[] @relation("AppointmentFollowUp")
+  events AppointmentEvent[]
+  prescriptions Prescription[]
+  clinicalNotes AppointmentClinicalNote[]
+  @@id([userId, id])
+  @@index([userId, start, id])
+  @@index([doctorId, start, id])
+}
+
+model AppointmentEvent {
+  userId String
+  id String
+  appointmentId String
+  actorId String
+  kind String
+  snapshot Json
+  createdAt DateTime @default(now())
+  appointment Appointment @relation(fields: [userId, appointmentId], references: [userId, id], onDelete: Restrict)
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  @@id([userId, id])
+  @@index([userId, appointmentId, createdAt])
+}
+
+model AppointmentClinicalNote {
+  userId String
+  id String
+  appointmentId String
+  doctorId String
+  text String
+  createdAt DateTime @default(now())
+  appointment Appointment @relation(fields: [userId, appointmentId], references: [userId, id], onDelete: Restrict)
+  doctor User @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  @@id([userId, id])
+}
+
+model Prescription {
+  userId String
+  id String
+  appointmentId String
+  doctorId String
+  doctorName String
+  instructions String
+  items Json
+  issuedAt DateTime @default(now())
+  revokedAt DateTime?
+  revocationReason String?
+  supersedesId String?
+  appointment Appointment @relation(fields: [userId, appointmentId], references: [userId, id], onDelete: Restrict)
+  doctor User @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  supersedes Prescription? @relation("PrescriptionReplacement", fields: [userId, supersedesId], references: [userId, id], onDelete: NoAction, onUpdate: NoAction)
+  replacements Prescription[] @relation("PrescriptionReplacement")
+  @@id([userId, id])
+  @@index([userId, appointmentId, issuedAt])
+}
+
+model AppointmentOperation {
+  userId String
+  id String
+  actorId String
+  requestHash String
+  result Json
+  createdAt DateTime @default(now())
+  @@id([userId, id])
 }
 
 model PatientProfile {

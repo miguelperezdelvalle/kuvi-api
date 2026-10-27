@@ -1,4 +1,5 @@
 import { medicationsRoutes } from '../modules/medications/medications.routes.js';
+import { appointmentsRoutes } from '../modules/appointments/appointments.routes.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -57,6 +58,7 @@ async function buildApp() {
   await app.register(summaryRoutes, { prefix: '/summary' });
   await app.register(doctorRoutes, { prefix: '/doctor' });
   await app.register(medicationsRoutes, { prefix: '/medications' });
+  await app.register(appointmentsRoutes, { prefix: '/appointments' });
   return app;
 }
 

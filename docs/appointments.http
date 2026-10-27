@@ -1,0 +1,94 @@
+# Appointment API contract (backend only; no automatic appointment booking or push worker).
+# Authorization: Bearer patient token on /me, doctor token on /doctor.
+# A doctor can read/write ONLY appointments explicitly linked to that doctorId.
+# Patient creation may nominate an active doctor; bookingStatus is then requested,
+# never confirmed. No doctor creation on behalf of arbitrary patients is exposed.
+# External doctor appointments have doctorId=null and bookingStatus=recorded.
+# doctorName is a display snapshot entered by the patient, not a verified credential.
+# Prescription issuer identity is the authenticated doctorId, never a request field.
+# Appointment dates include offsets; timezone is an IANA name. Responses use UTC.
+# State: scheduled -> cancelled/completed/no_show (no automatic attendance inference).
+# Terminal states cannot be reopened; create a linked follow-up instead.
+# Archive is reversible and independent of attendance state; no DELETE endpoint.
+# Archived records are read-only except unarchive and doctor prescription revocation.
+# Reminder preferences are stored only. The app must cancel reminders on archive or
+# terminal state and must not reschedule expired reminder times for immediate firing.
+# Lists default to all records, including archived, for offline reconciliation.
+# List pagination orders by (userId,id), uses opaque nextCursor, max limit=100.
+# Details include all notes/recipes and the 100 latest audit events.
+# Save is a full replacement of editable fields, not PATCH. Defaults apply.
+# Mutations require expectedVersion (0 for creation) and stable operationId.
+# Retry the EXACT same operation after an uncertain network result. A 409 means
+# fetch current state and resolve the conflict; do not auto-overwrite or regenerate IDs.
+# Every successful action increments the appointment version. Prescription contents
+# are immutable; replacement revokes the prior record and retains both originals.
+# Patient notes and doctor-authored clinical notes are separate.
+# Medication creation/inventory are NOT changed by issuing a prescription.
+# App integration, reminder delivery, patient acceptance of treatment imports,
+# and legal/electronic-signature workflows are outside this backend change.
+
+@base = http://localhost:3000
+@token = REPLACE_WITH_PATIENT_TOKEN
+@doctorToken = REPLACE_WITH_LINKED_DOCTOR_TOKEN
+@patientId = REPLACE_WITH_PATIENT_ID
+
+### List own records. Continue with ?cursor=<nextCursor> when non-null.
+GET {{base}}/appointments/me?limit=50&archived=all
+Authorization: Bearer {{token}}
+
+### Create (keep the same IDs across retries; examples are not executed automatically).
+POST {{base}}/appointments/me/operations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "operationId": "appointment-create-example",
+  "action": {
+    "type": "save", "id": "appointment-example", "expectedVersion": 0,
+    "appointment": {
+      "doctorId": null, "doctorName": "Doctor externo", "specialty": "Medicina general",
+      "start": "2026-11-05T10:00:00-06:00", "end": "2026-11-05T10:30:00-06:00",
+      "timezone": "America/Mexico_City", "modality": "in_person",
+      "location": "Consultorio", "address": "Dirección del consultorio",
+      "mapUrl": null, "consultationUrl": null, "reason": "Revisión",
+      "preparation": "Llevar estudios", "patientNotes": "",
+      "followUpAt": null, "previousAppointmentId": null,
+      "reminder24h": true, "reminder1h": true
+    }
+  }
+}
+
+### Load by ID (also supports opening a reminder without passing an app object).
+GET {{base}}/appointments/me/appointment-example
+Authorization: Bearer {{token}}
+
+### Patient operations: save, reschedule, status, archive, patient_notes.
+# status includes status and reason; archive includes archived:true/false.
+# patient_notes includes text and followUpAt (ISO date or null).
+# reschedule includes start,end,timezone,reason and resets doctor confirmation.
+# On save, doctorId and previousAppointmentId cannot change after creation.
+
+### Doctor operations: confirm, reschedule, status, clinical_note,
+# issue_prescription, revoke_prescription. All target an existing linked appointment.
+# clinical_note: noteId,text. Only after confirmed consultation start.
+# issue_prescription: prescriptionId,instructions,items,supersedesId(optional).
+# Each item: id,name,ingredients,strength,form,dose,route,frequency,duration,
+# instructions,asNeeded,maxDailyDose. Prescription quantities are authored text,
+# never interpreted as stock or automatically converted into a treatment.
+# revoke_prescription: prescriptionId,reason. Allowed even after archiving.
+GET {{base}}/appointments/doctor?limit=50
+Authorization: Bearer {{doctorToken}}
+
+### Doctor detail
+GET {{base}}/appointments/doctor/{{patientId}}/appointment-example
+Authorization: Bearer {{doctorToken}}
+
+### Confirmation example; patient must first link this doctor's ID on creation.
+POST {{base}}/appointments/doctor/{{patientId}}/operations
+Authorization: Bearer {{doctorToken}}
+Content-Type: application/json
+
+{
+  "operationId": "appointment-confirm-example",
+  "action": { "type": "confirm", "id": "appointment-example", "expectedVersion": 1 }
+}
