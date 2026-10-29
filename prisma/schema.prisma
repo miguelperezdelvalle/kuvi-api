@@ -33,6 +33,8 @@ model Appointment {
   userId String
   id String
   doctorId String?
+  directoryDoctorId String?
+  directoryDoctor Physician? @relation(fields: [directoryDoctorId], references: [id], onDelete: Restrict)
   doctorName String
   specialty String
   start DateTime
@@ -67,6 +69,36 @@ model Appointment {
   @@id([userId, id])
   @@index([userId, start, id])
   @@index([doctorId, start, id])
+  @@index([directoryDoctorId, status, start])
+}
+
+// External directory identity does not grant access to patient records.
+model Physician {
+  id String @id @default(cuid())
+  name String
+  specialties Json
+  offices Json
+  photoUrl String?
+  photoSourceUrl String?
+  photoCheckedAt DateTime?
+  affiliationStatus String @default("external")
+  fetchedAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sources PhysicianSource[]
+  appointments Appointment[]
+}
+
+model PhysicianSource {
+  id String @id @default(cuid())
+  physicianId String
+  provider String
+  profileUrl String
+  externalId String?
+  fetchedAt DateTime
+  physician Physician @relation(fields: [physicianId], references: [id], onDelete: Restrict)
+  @@unique([provider, profileUrl])
+  @@unique([provider, externalId])
 }
 
 model AppointmentEvent {

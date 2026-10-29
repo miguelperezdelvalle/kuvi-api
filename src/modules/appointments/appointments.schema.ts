@@ -13,6 +13,7 @@ const timezone = text(100).refine(v => {
 const version = z.number().int().min(1);
 const appointment = z.object({
   doctorId: id.nullable(), doctorName: text(200).min(1), specialty: text(200).min(1),
+  directoryDoctorId: id.nullable().optional(),
   start: date, end: date, timezone, location: text(500), address: text(1000).default(''),
   mapUrl: url.nullable().default(null), consultationUrl: url.nullable().default(null),
   modality: z.enum(['in_person', 'video']), reason: text(2000).default(''),

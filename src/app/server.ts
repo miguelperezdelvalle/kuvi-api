@@ -1,5 +1,6 @@
 import { medicationsRoutes } from '../modules/medications/medications.routes.js';
 import { appointmentsRoutes } from '../modules/appointments/appointments.routes.js';
+import { physiciansRoutes } from '../modules/physicians/physicians.routes.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -59,6 +60,7 @@ async function buildApp() {
   await app.register(doctorRoutes, { prefix: '/doctor' });
   await app.register(medicationsRoutes, { prefix: '/medications' });
   await app.register(appointmentsRoutes, { prefix: '/appointments' });
+  await app.register(physiciansRoutes, { prefix: '/physicians' });
   return app;
 }
 

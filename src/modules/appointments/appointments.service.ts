@@ -85,6 +85,11 @@ export async function applyAppointmentOperation(actor: Actor, userId: string, in
       patientOnly();
       if (old && old.status !== 'scheduled') fail(409, 'APPOINTMENT_CLOSED');
       const p = a.appointment;
+      // Optional for old clients; omission preserves the existing association and
+      // does not change the hash of operations sent before this feature existed.
+      const directoryDoctorId = p.directoryDoctorId === undefined ? old?.directoryDoctorId ?? null : p.directoryDoctorId;
+      if (old?.directoryDoctorId && directoryDoctorId !== old.directoryDoctorId) fail(409, 'DIRECTORY_DOCTOR_CHANGE_REQUIRES_NEW_APPOINTMENT');
+      if (directoryDoctorId && !await tx.physician.findUnique({ where: { id: directoryDoctorId } })) fail(400, 'INVALID_DIRECTORY_DOCTOR');
       if (old && old.doctorId !== p.doctorId) fail(409, 'DOCTOR_CHANGE_REQUIRES_NEW_APPOINTMENT');
       if (old && old.previousAppointmentId !== p.previousAppointmentId) fail(409, 'FOLLOW_UP_LINK_IMMUTABLE');
       if (p.doctorId) {
@@ -98,7 +103,7 @@ export async function applyAppointmentOperation(actor: Actor, userId: string, in
       const changed = !old || old.start.toISOString() !== new Date(p.start).toISOString() ||
         old.end.toISOString() !== new Date(p.end).toISOString() || old.location !== p.location ||
         old.address !== p.address || old.consultationUrl !== p.consultationUrl || old.modality !== p.modality;
-      const data = { ...p, start: new Date(p.start), end: new Date(p.end),
+      const data = { ...p, directoryDoctorId, start: new Date(p.start), end: new Date(p.end),
         followUpAt: p.followUpAt ? new Date(p.followUpAt) : null,
         bookingStatus: changed ? (p.doctorId ? 'requested' : 'recorded') : old!.bookingStatus };
       await tx.appointment.upsert({ where: key(userId, a.id),
