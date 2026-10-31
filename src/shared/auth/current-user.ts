@@ -1,10 +1,15 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../infrastructure/db/prisma.js';
+import { env } from '../../app/env.js';
 
 type AuthPayload = {
   sub?: string;
   username?: string;
   role?: string;
+  sid?: string;
+  tokenUse?: string;
+  exp?: number;
+  iat?: number;
 };
 
 export async function requireAuthenticatedUser(
@@ -22,6 +27,33 @@ export async function requireAuthenticatedUser(
   }
 
   const payload = request.user as AuthPayload;
+
+  if (payload.sid !== undefined || payload.tokenUse !== undefined) {
+    if (payload.tokenUse !== 'access' || typeof payload.sid !== 'string' ||
+        typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) ||
+        typeof payload.sub !== 'string') {
+      reply.code(401).send({ result: 'KO', code: 'INVALID_ACCESS_TOKEN', message: 'Sign in again' });
+      return null;
+    }
+    const session = await prisma.authSession.findFirst({ where: {
+      id: payload.sid, userId: payload.sub, revokedAt: null, expiresAt: { gt: new Date() },
+    } });
+    if (!session) {
+      reply.code(401).send({ result: 'KO', code: 'SESSION_EXPIRED', message: 'Sign in again' });
+      return null;
+    }
+  } else {
+    // Old app versions retain their signed token only for a bounded transition.
+    // Each legacy token expires no later than seven days after its original iat;
+    // restarting the service cannot renew that window. It cannot be refreshed.
+    const now = Date.now() / 1000;
+    if (!env.AUTH_LEGACY_MAX_AGE_SECONDS || typeof payload.iat !== 'number' ||
+        !Number.isFinite(payload.iat) || payload.iat > now + 60 ||
+        now >= payload.iat + env.AUTH_LEGACY_MAX_AGE_SECONDS) {
+      reply.code(401).send({ result: 'KO', code: 'SESSION_EXPIRED', message: 'Sign in again' });
+      return null;
+    }
+  }
 
   const user = payload.sub
     ? await prisma.user.findUnique({

@@ -26,3 +26,8 @@ Backend Fastify + Prisma/PostgreSQL. Use Node.js 22 and run commands from this d
 Tests require valid environment settings but do not create users, alter data, apply migrations or run the seed. The seed is executed separately with `npm run seed`; it is not part of the application build.
 
 Before changing the database, prepare and review a migration and back up the database. Do not use reset commands against an existing database.
+
+## Sessions and attempt limits
+
+See `docs/stabilization-sessions.md` for access expiry, refresh rotation, logout,
+legacy-token transition, migration and Flutter integration requirements.

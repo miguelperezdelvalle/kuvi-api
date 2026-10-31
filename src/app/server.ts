@@ -21,6 +21,8 @@ async function buildApp() {
   const app = Fastify({
     logger: {
       level: env.LOG_LEVEL,
+      redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'req.body.password',
+        'req.body.refreshToken', 'res.body.token', 'res.body.refreshToken'], censor: '[redacted]' },
     },
   });
 

@@ -69,7 +69,11 @@ test('clinical access containment and account status use synthetic in-memory dat
       [appointmentsRoutes, '/appointments'], [questionnaireRoutes, '/questionnaire'],
       [medicalHistoryRoutes, '/medical-history'], [sharingRoutes, '/sharing'],
       [summaryRoutes, '/summary'], [physiciansRoutes, '/physicians'],
-    ]) await app.register(routes, { prefix });
+    ]) await app.register(routes, { prefix, ...(routes === authRoutes ? { sessions: {
+      create: async () => ({ id: 'synthetic-session', refreshToken: randomBytes(32).toString('base64url'),
+        expiresAt: new Date(Date.now() + 86400000) }),
+      rotate: async () => null, revoke: async () => {},
+    } } : {}) });
     await app.ready();
     const req = (actor, method, url, payload, claims = {}) => app.inject({ method, url, payload,
       headers: actor ? { authorization: `Bearer ${app.jwt.sign({ sub: actor, ...claims })}` } : {} });

@@ -27,6 +27,28 @@ model User {
   questionnaireAnswers QuestionnaireAnswer[]
   medicalHistoryNotes  MedicalHistoryNote[]
   sharedAccesses       SharedAccess[]
+  authSessions         AuthSession[]
+}
+
+model AuthSession {
+  id String @id @default(cuid())
+  userId String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens AuthRefreshToken[]
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model AuthRefreshToken {
+  tokenHash String @id
+  sessionId String
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  session AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId])
 }
 
 model Appointment {

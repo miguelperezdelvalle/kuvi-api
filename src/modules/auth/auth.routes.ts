@@ -1,8 +1,11 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../../infrastructure/db/prisma.js';
 import { requireAuthenticatedUser } from '../../shared/auth/current-user.js';
+import { env } from '../../app/env.js';
+import { AuthSessions } from './auth.sessions.js';
+import { AuthRateLimiter, type AuthCategory } from './auth.rate-limit.js';
 
 const registerSchema = z.object({
   username: z.string().trim().min(3).max(32),
@@ -15,6 +18,7 @@ const loginSchema = z.object({
   username: z.string().trim().min(3).max(32),
   password: z.string().min(6).max(72),
 });
+const refreshSchema = z.object({ refreshToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 
 function buildUserResponse(user: {
   id: string;
@@ -28,7 +32,35 @@ function buildUserResponse(user: {
   };
 }
 
-export const authRoutes: FastifyPluginAsync = async (app) => {
+type Options = { sessions?: Pick<AuthSessions, 'create' | 'rotate' | 'revoke'>; limiter?: AuthRateLimiter };
+export const authRoutes: FastifyPluginAsync<Options> = async (app, options) => {
+  const sessions = options.sessions ?? new AuthSessions();
+  const limiter = options.limiter ?? new AuthRateLimiter();
+  const rateLimit = (reply: FastifyReply, seconds: number) => reply.header('Retry-After', seconds)
+    .code(429).send({ result: 'KO', code: 'AUTH_RATE_LIMIT', message: 'Try again later' });
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache');
+    if (request.method !== 'POST') return;
+    const path = request.routeOptions.url ?? '';
+    const category: AuthCategory = path.endsWith('/login') ? 'login' :
+      path.endsWith('/refresh') ? 'refresh' : path.endsWith('/logout') ? 'logout' : 'register';
+    const retry = limiter.ip(request.ip, category);
+    if (retry) return rateLimit(reply, retry);
+  });
+  app.addHook('preValidation', async (request, reply) => {
+    if (!request.routeOptions.url?.endsWith('/login')) return;
+    const username = (request.body as { username?: unknown } | null)?.username;
+    if (typeof username !== 'string' || username.length > 32) return;
+    const retry = limiter.account(username);
+    if (retry) return rateLimit(reply, retry);
+  });
+  const issue = async (reply: FastifyReply, user: { id: string; username: string; role: string },
+    session: { id: string; refreshToken: string; expiresAt: Date }) => ({
+    token: await reply.jwtSign({ sub: user.id, username: user.username, role: user.role,
+      sid: session.id, tokenUse: 'access' }, { sign: { expiresIn: `${env.AUTH_ACCESS_TTL_SECONDS}s` } }),
+    tokenType: 'Bearer', expiresIn: env.AUTH_ACCESS_TTL_SECONDS,
+    refreshToken: session.refreshToken, refreshExpiresAt: session.expiresAt.toISOString(),
+  });
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({
@@ -73,16 +105,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    const token = await reply.jwtSign({
-      sub: user.id,
-      username: user.username,
-      role: user.role,
-    });
+    const tokens = await issue(reply, user, await sessions.create(user.id));
 
     return reply.code(201).send({
       result: 'OK',
       message: 'registered',
-      token,
+      ...tokens,
       user: buildUserResponse(user),
     });
   });
@@ -128,18 +156,28 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    const token = await reply.jwtSign({
-      sub: user.id,
-      username: user.username,
-      role: user.role,
-    });
+    const tokens = await issue(reply, user, await sessions.create(user.id));
 
     return {
       result: 'OK',
       message: 'login ok',
-      token,
+      ...tokens,
       user: buildUserResponse(user),
     };
+  });
+
+  app.post('/refresh', async (request, reply) => {
+    const { refreshToken } = refreshSchema.parse(request.body);
+    const session = await sessions.rotate(refreshToken);
+    if (!session) return reply.code(401).send({ result: 'KO', code: 'INVALID_REFRESH_TOKEN', message: 'Sign in again' });
+    return { result: 'OK', message: 'session renewed',
+      ...await issue(reply, session.user, session), user: buildUserResponse(session.user) };
+  });
+
+  app.post('/logout', async (request, reply) => {
+    const { refreshToken } = refreshSchema.parse(request.body);
+    await sessions.revoke(refreshToken);
+    return { result: 'OK', message: 'session closed' };
   });
 
   app.get('/me', async (request, reply) => {
