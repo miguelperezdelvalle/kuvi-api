@@ -85,7 +85,10 @@ test('appointment backend persistence, access and lifecycle', async t => {
       await rejects(apply({ type: 'confirm', id: 'consultation', expectedVersion: 1 }), 'DOCTOR_ACTION_REQUIRED');
       await rejects(apply(save('forged', { ...details(), bookingStatus: 'confirmed' })), 'INVALID_APPOINTMENT_OPERATION');
       await apply({ type: 'confirm', id: 'consultation', expectedVersion: 1 }, doctor);
-      assert.equal((await listAppointments(doctor, {})).value.length, 1);
+      const assigned = (await listAppointments(doctor, {})).value;
+      assert.equal(assigned.length, 1);
+      assert.deepEqual(assigned[0].patient, { id: user.id, username: user.username });
+      assert.deepEqual((await getAppointment(doctor, user.id, 'consultation')).value.patient, { id: user.id, username: user.username });
       await rejects(apply({ type: 'clinical_note', id: 'consultation', expectedVersion: 2, noteId: 'bad', text: 'forged' }), 'DOCTOR_ACTION_REQUIRED');
       await apply({ type: 'clinical_note', id: 'consultation', expectedVersion: 2, noteId: 'note1', text: 'Doctor-authored follow-up instructions' }, doctor);
       assert.equal((await read('consultation')).clinicalNotes[0].doctorId, doctor.id);

@@ -20,7 +20,7 @@ function canonical(value: unknown): string {
 function scope(actor: Actor, userId: string) {
   if (actor.role !== 'doctor' && (actor.role !== 'patient' || actor.id !== userId)) fail(403, 'FORBIDDEN');
 }
-const include = { clinicalNotes: { orderBy: { createdAt: 'asc' as const } },
+const include = { patient: { select: { id: true, username: true } }, clinicalNotes: { orderBy: { createdAt: 'asc' as const } },
   prescriptions: { orderBy: { issuedAt: 'asc' as const } },
   events: { orderBy: { createdAt: 'desc' as const }, take: 100 } };
 
@@ -63,7 +63,7 @@ export async function listAppointments(actor: Actor, input: unknown) {
     ...(actor.role === 'patient' ? { userId: actor.id } : { doctorId: actor.id }),
     ...(q.archived === 'all' ? {} : { archivedAt: q.archived === 'true' ? { not: null } : null }),
     ...(after ? { OR: [{ userId: { gt: after.userId } }, { userId: after.userId, id: { gt: after.id } }] } : {}),
-  }, orderBy: [{ userId: 'asc' }, { id: 'asc' }], take: q.limit + 1 }));
+  }, include: { patient: { select: { id: true, username: true } } }, orderBy: [{ userId: 'asc' }, { id: 'asc' }], take: q.limit + 1 }));
   const more = rows.length > q.limit;
   const value = rows.slice(0, q.limit);
   const last = value.at(-1);
