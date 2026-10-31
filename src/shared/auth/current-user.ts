@@ -110,5 +110,13 @@ export async function requireRole(
     return null;
   }
 
+  if (expectedRole === 'doctor') {
+    const approval = await prisma.doctorApproval.findUnique({ where: { userId: user.id } });
+    if (!approval || approval.revokedAt || approval.approvedAt > new Date()) {
+      reply.code(403).send({ result: 'KO', code: 'DOCTOR_NOT_APPROVED', message: 'Clinical approval required' });
+      return null;
+    }
+  }
+
   return user;
 }

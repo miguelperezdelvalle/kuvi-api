@@ -19,6 +19,8 @@
     "test:appointments": "node tests/run-appointments.mjs",
     "test:physicians": "node tests/run-physicians.mjs",
     "test:sessions": "node tests/run-sessions.mjs",
+    "test:clinical-access": "node tests/run-clinical-access.mjs",
+    "doctor:onboard": "node dist/modules/clinical-access/doctor-onboarding-cli.js",
     "report:physicians": "node dist/modules/physicians/report.js"
   },
   "repository": {

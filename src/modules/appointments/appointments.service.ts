@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '../../infrastructure/db/prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { operationSchema, listSchema } from './appointments.schema.js';
+import { lockDoctor } from '../clinical-access/clinical-access.service.js';
 
 export class AppointmentError extends Error {
   constructor(public status: number, public code: string, public details: unknown = null) { super(code); }
@@ -23,10 +24,24 @@ const include = { clinicalNotes: { orderBy: { createdAt: 'asc' as const } },
   prescriptions: { orderBy: { issuedAt: 'asc' as const } },
   events: { orderBy: { createdAt: 'desc' as const }, take: 100 } };
 
+async function approvedDoctor(tx: Prisma.TransactionClient, doctorId: string) {
+  const doctor = await tx.user.findUnique({ where: { id: doctorId }, include: { doctorApproval: true } });
+  if (!doctor || doctor.role !== 'doctor' || doctor.status !== 'active' ||
+      !doctor.doctorApproval || doctor.doctorApproval.revokedAt || doctor.doctorApproval.approvedAt > new Date())
+    fail(403, 'DOCTOR_NOT_APPROVED');
+}
+async function readAsActor<T>(actor: Actor, read: (tx: Prisma.TransactionClient) => Promise<T>) {
+  if (actor.role !== 'doctor') return read(prisma);
+  return prisma.$transaction(async tx => {
+    await lockDoctor(tx, actor.id); await approvedDoctor(tx, actor.id);
+    return read(tx);
+  });
+}
+
 export async function getAppointment(actor: Actor, userId: string, id: string) {
   scope(actor, userId);
-  const value = await prisma.appointment.findFirst({ where: { userId, id,
-    ...(actor.role === 'doctor' ? { doctorId: actor.id } : {}) }, include });
+  const value = await readAsActor(actor, tx => tx.appointment.findFirst({ where: { userId, id,
+    ...(actor.role === 'doctor' ? { doctorId: actor.id } : {}) }, include }));
   if (!value) fail(404, 'APPOINTMENT_NOT_FOUND');
   return { result: 'OK', value };
 }
@@ -44,11 +59,11 @@ export async function listAppointments(actor: Actor, input: unknown) {
       after = { userId: v[0], id: v[1] };
     } catch { fail(400, 'INVALID_CURSOR'); }
   }
-  const rows = await prisma.appointment.findMany({ where: {
+  const rows = await readAsActor(actor, tx => tx.appointment.findMany({ where: {
     ...(actor.role === 'patient' ? { userId: actor.id } : { doctorId: actor.id }),
     ...(q.archived === 'all' ? {} : { archivedAt: q.archived === 'true' ? { not: null } : null }),
     ...(after ? { OR: [{ userId: { gt: after.userId } }, { userId: after.userId, id: { gt: after.id } }] } : {}),
-  }, orderBy: [{ userId: 'asc' }, { id: 'asc' }], take: q.limit + 1 });
+  }, orderBy: [{ userId: 'asc' }, { id: 'asc' }], take: q.limit + 1 }));
   const more = rows.length > q.limit;
   const value = rows.slice(0, q.limit);
   const last = value.at(-1);
@@ -62,6 +77,7 @@ export async function applyAppointmentOperation(actor: Actor, userId: string, in
   const op = parsed.data, a = op.action;
   const hash = createHash('sha256').update(canonical({ actorId: actor.id, action: a })).digest('hex');
   return prisma.$transaction(async tx => {
+    if (actor.role === 'doctor') { await lockDoctor(tx, actor.id); await approvedDoctor(tx, actor.id); }
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`appointments:${userId}`}, 0))`;
     const active = await tx.user.findUnique({ where: { id: actor.id } });
     if (!active || active.status !== 'active' || active.role !== actor.role) fail(403, 'INACTIVE_OR_INVALID_ACTOR');
@@ -93,8 +109,9 @@ export async function applyAppointmentOperation(actor: Actor, userId: string, in
       if (old && old.doctorId !== p.doctorId) fail(409, 'DOCTOR_CHANGE_REQUIRES_NEW_APPOINTMENT');
       if (old && old.previousAppointmentId !== p.previousAppointmentId) fail(409, 'FOLLOW_UP_LINK_IMMUTABLE');
       if (p.doctorId) {
-        const doctor = await tx.user.findUnique({ where: { id: p.doctorId } });
-        if (!doctor || doctor.role !== 'doctor' || doctor.status !== 'active') fail(400, 'INVALID_DOCTOR');
+        const doctor = await tx.user.findUnique({ where: { id: p.doctorId }, include: { doctorApproval: true } });
+        if (!doctor || doctor.role !== 'doctor' || doctor.status !== 'active' ||
+            !doctor.doctorApproval || doctor.doctorApproval.revokedAt || doctor.doctorApproval.approvedAt > new Date()) fail(400, 'INVALID_DOCTOR');
       }
       if (p.previousAppointmentId) {
         const previous = await tx.appointment.findUnique({ where: key(userId, p.previousAppointmentId) });

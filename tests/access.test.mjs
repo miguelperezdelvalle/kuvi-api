@@ -47,6 +47,7 @@ test('clinical access containment and account status use synthetic in-memory dat
     if (data.username === 'synthetic-race') throw Object.assign(new Error('duplicate'), { code: 'P2002' });
     return { id: 'created-patient', ...data };
   });
+  replace('doctorApproval', 'findUnique', async () => null);
   // Denied routes must stop before inspecting a patient collection or clinical
   // records. Any accidental attempt fails instead of touching the real database.
   const clinicalAccess = () => { throw new Error('Forbidden clinical database access in test'); };
@@ -94,10 +95,10 @@ test('clinical access containment and account status use synthetic in-memory dat
         assert.equal((await req('patient', 'GET', path)).statusCode, 403);
         assert.equal((await req('patient', 'GET', path, undefined, { role: 'doctor' })).statusCode, 403);
       });
-      await t.test(`${path} denies active doctors without querying patient data`, async () => {
+      await t.test(`${path} denies unapproved active doctors without querying patient data`, async () => {
         const res = await req('doctor', 'GET', path);
         assert.equal(res.statusCode, 403);
-        assert.equal(res.json().code, 'PATIENT_ACCESS_NOT_CONFIGURED');
+        assert.equal(res.json().code, 'DOCTOR_NOT_APPROVED');
         assert.equal(res.json().value, undefined);
         assert.equal(res.json().patient, undefined);
       });

@@ -20,6 +20,7 @@ test('appointment backend persistence, access and lifecycle', async t => {
   const other = await prisma.user.create({ data: { username: randomUUID(), passwordHash: 'test-only' } });
   const doctor = await prisma.user.create({ data: { username: randomUUID(), passwordHash: 'test-only', role: 'doctor' } });
   const stranger = await prisma.user.create({ data: { username: randomUUID(), passwordHash: 'test-only', role: 'doctor' } });
+  await prisma.doctorApproval.createMany({ data: [doctor, stranger].map(d => ({ userId: d.id, approvedAt: new Date(), approvedBy: 'synthetic-operator', verificationReference: 'synthetic-fixture' })) });
   const apply = (action, actor = user, operationId = randomUUID(), owner = user.id) => applyAppointmentOperation(actor, owner, { operationId, action });
   const read = async id => (await getAppointment(user, user.id, id)).value;
   const app = Fastify();

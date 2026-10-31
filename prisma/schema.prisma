@@ -28,6 +28,57 @@ model User {
   medicalHistoryNotes  MedicalHistoryNote[]
   sharedAccesses       SharedAccess[]
   authSessions         AuthSession[]
+  doctorApproval       DoctorApproval?
+  patientGrants        PatientDoctorGrant[] @relation("GrantPatient")
+  receivedGrants       PatientDoctorGrant[] @relation("GrantDoctor")
+}
+
+model DoctorApproval {
+  userId String @id
+  approvedAt DateTime
+  approvedBy String
+  verificationReference String
+  revokedAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  events DoctorApprovalEvent[]
+}
+
+model DoctorApprovalEvent {
+  id String @id @default(cuid())
+  doctorId String
+  operator String
+  action String
+  reference String
+  createdAt DateTime @default(now())
+  approval DoctorApproval @relation(fields: [doctorId], references: [userId], onDelete: Restrict)
+  @@index([doctorId, createdAt])
+}
+
+model PatientDoctorGrant {
+  id String @id @default(cuid())
+  patientId String
+  doctorId String
+  scopes String[]
+  expiresAt DateTime
+  revokedAt DateTime?
+  version Int @default(1)
+  grantedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  patient User @relation("GrantPatient", fields: [patientId], references: [id], onDelete: Restrict)
+  doctor User @relation("GrantDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  events PatientDoctorGrantEvent[]
+  @@unique([patientId, doctorId])
+  @@index([doctorId, revokedAt, expiresAt])
+}
+
+model PatientDoctorGrantEvent {
+  id String @id @default(cuid())
+  grantId String
+  action String
+  snapshot Json
+  createdAt DateTime @default(now())
+  grant PatientDoctorGrant @relation(fields: [grantId], references: [id], onDelete: Restrict)
+  @@index([grantId, createdAt])
 }
 
 model AuthSession {

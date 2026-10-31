@@ -1,16 +1,16 @@
 # Kuvi API
 
-Access behavior and the first stabilization increment are documented in
-`docs/stabilization-access.md`. General doctor patient-list/summary routes and
-public doctor registration are currently closed pending explicit authorization
-and approved onboarding. Patient and appointment-scoped flows remain supported.
+Current clinical access is documented in `docs/clinical-access.md`: approved
+medical accounts and explicit per-patient grants are required for general record
+queries. Public doctor registration remains disabled. Historical stabilization
+steps are recorded in the other stabilization documents.
 
 Backend Fastify + Prisma/PostgreSQL. Use Node.js 22 and run commands from this directory.
 
 ## Setup
 
 1. Run `npm ci` (all runtime dependencies belong to this project).
-2. Configure `.env` with `DATABASE_URL`, `JWT_SECRET` and optional settings from `src/app/env.ts`. Keep real secrets out of Git.
+2. Configure `.env` with `DATABASE_URL`, a randomly generated `JWT_SECRET` of at least 32 characters, and optional settings from `src/app/env.ts`. Keep real secrets out of Git.
 3. Run `npm run prisma:generate` after installing or changing the Prisma schema.
 4. Check existing migrations with `npx prisma migrate status` before starting the service.
 
