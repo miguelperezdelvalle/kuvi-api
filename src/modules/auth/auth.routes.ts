@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../../infrastructure/db/prisma.js';
+import { requireAuthenticatedUser } from '../../shared/auth/current-user.js';
 
 const registerSchema = z.object({
   username: z.string().trim().min(3).max(32),
@@ -14,34 +15,6 @@ const loginSchema = z.object({
   username: z.string().trim().min(3).max(32),
   password: z.string().min(6).max(72),
 });
-
-type AuthPayload = {
-  sub?: string;
-  username?: string;
-  role?: string;
-};
-
-async function findCurrentUser(payload: AuthPayload) {
-  if (payload.sub) {
-    return prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: {
-        patientProfile: true,
-      },
-    });
-  }
-
-  if (payload.username) {
-    return prisma.user.findUnique({
-      where: { username: payload.username },
-      include: {
-        patientProfile: true,
-      },
-    });
-  }
-
-  return null;
-}
 
 function buildUserResponse(user: {
   id: string;
@@ -56,6 +29,18 @@ function buildUserResponse(user: {
 }
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof z.ZodError) {
+      return reply.code(400).send({
+        result: 'KO', code: 'INVALID_PARAMETERS', message: 'Invalid parameters',
+      });
+    }
+    if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
+      return reply.code(409).send({ result: 'KO', message: 'Username already exists' });
+    }
+    return reply.send(error);
+  });
+
   app.post('/register-patient', async (request, reply) => {
     const body = registerSchema.parse(request.body);
 
@@ -102,42 +87,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  app.post('/register-doctor', async (request, reply) => {
-    const body = registerSchema.parse(request.body);
-
-    const existingUser = await prisma.user.findUnique({
-      where: { username: body.username },
-    });
-
-    if (existingUser) {
-      return reply.code(409).send({
-        result: 'KO',
-        message: 'Username already exists',
-      });
-    }
-
-    const passwordHash = await bcrypt.hash(body.password, 10);
-
-    const user = await prisma.user.create({
-      data: {
-        username: body.username,
-        passwordHash,
-        role: 'doctor',
-        status: 'active',
-      },
-    });
-
-    const token = await reply.jwtSign({
-      sub: user.id,
-      username: user.username,
-      role: user.role,
-    });
-
-    return reply.code(201).send({
-      result: 'OK',
-      message: 'registered',
-      token,
-      user: buildUserResponse(user),
+  // Public registration must never grant a clinical role. Re-enable only
+  // through a reviewed onboarding workflow, never a caller-supplied role.
+  app.post('/register-doctor', async (_request, reply) => {
+    return reply.code(403).send({
+      result: 'KO',
+      code: 'DOCTOR_REGISTRATION_DISABLED',
+      message: 'Doctor registration requires an approved onboarding workflow',
     });
   });
 
@@ -164,6 +120,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    if (user.status !== 'active') {
+      return reply.code(403).send({
+        result: 'KO',
+        code: 'INACTIVE_USER',
+        message: 'Account is not active',
+      });
+    }
+
     const token = await reply.jwtSign({
       sub: user.id,
       username: user.username,
@@ -179,24 +143,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/me', async (request, reply) => {
-    try {
-      await request.jwtVerify();
-    } catch {
-      return reply.code(401).send({
-        result: 'KO',
-        message: 'Unauthorized',
-      });
-    }
-
-    const payload = request.user as AuthPayload;
-    const user = await findCurrentUser(payload);
-
-    if (!user) {
-      return reply.code(404).send({
-        result: 'KO',
-        message: 'User not found',
-      });
-    }
+    const user = await requireAuthenticatedUser(request, reply);
+    if (!user) return;
 
     return {
       result: 'OK',

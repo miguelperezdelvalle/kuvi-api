@@ -47,6 +47,15 @@ export async function requireAuthenticatedUser(
     return null;
   }
 
+  if (user.status !== 'active') {
+    reply.code(403).send({
+      result: 'KO',
+      code: 'INACTIVE_USER',
+      message: 'Account is not active',
+    });
+    return null;
+  }
+
   return user;
 }
 

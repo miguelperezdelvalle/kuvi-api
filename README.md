@@ -1,5 +1,10 @@
 # Kuvi API
 
+Access behavior and the first stabilization increment are documented in
+`docs/stabilization-access.md`. General doctor patient-list/summary routes and
+public doctor registration are currently closed pending explicit authorization
+and approved onboarding. Patient and appointment-scoped flows remain supported.
+
 Backend Fastify + Prisma/PostgreSQL. Use Node.js 22 and run commands from this directory.
 
 ## Setup
