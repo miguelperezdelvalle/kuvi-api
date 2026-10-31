@@ -148,3 +148,12 @@ clinical-read audit/monitoring beyond permission-change events, operational audi
 retention, session cleanup, production deployment, shared rate limiting and review
 of backup restoration/network exposure remain separate work. The older QR/.kuv
 export still represents an offline copy and does not gain online revocation here.
+
+## App identity verification
+
+GET /doctor/me requires an active approved doctor and returns only its own
+id, username, role and clinicalApproved=true. POST /sharing/doctor-grants/recipient
+requires an active patient and strict {doctorId}; it returns only id, username and
+clinicalApproved=true for that exact active approved medical account. Unknown
+and unapproved recipients have the same 404. Neither creates a grant nor reads
+clinical records. These endpoints support account confirmation before consent.

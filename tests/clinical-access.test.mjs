@@ -78,6 +78,22 @@ test('explicit grants, clinical approval and signing-key rotation', async t => {
       const denied = await read(doctor), missing = await read(doctor, 'summary', 'synthetic-missing');
       assert.equal(denied.statusCode, 404); assert.deepEqual(denied.json(), missing.json());
     });
+    await t.test('apps verify approved identities without creating consent or reading a patient record', async () => {
+      const identity = await req(doctor, 'GET', '/doctor/me');
+      assert.equal(identity.statusCode, 200); assert.equal(identity.json().user.id, doctor.id);
+      assert.equal(identity.json().user.clinicalApproved, true);
+      assert.equal((await req(unapproved, 'GET', '/doctor/me')).statusCode, 403);
+      assert.equal((await req(patient, 'GET', '/doctor/me')).statusCode, 403);
+      const target = await req(patient, 'POST', '/sharing/doctor-grants/recipient', { doctorId: doctor.id });
+      assert.equal(target.statusCode, 200);
+      assert.deepEqual(target.json().value, { id: doctor.id, username: doctor.username, clinicalApproved: true });
+      for (const doctorId of [unapproved.id, 'synthetic-missing'])
+        assert.equal((await req(patient, 'POST', '/sharing/doctor-grants/recipient', { doctorId })).statusCode, 404);
+      assert.equal((await req(null, 'POST', '/sharing/doctor-grants/recipient', { doctorId: doctor.id })).statusCode, 401);
+      assert.equal((await req(doctor, 'POST', '/sharing/doctor-grants/recipient', { doctorId: doctor.id })).statusCode, 403);
+      assert.equal((await req(patient, 'POST', '/sharing/doctor-grants/recipient', { doctorId: doctor.id, patientId: other.id })).statusCode, 400);
+      assert.equal(await prisma.patientDoctorGrant.count(), 0);
+    });
     await t.test('summary consent exposes counts, not answers, notes, contact or credentials', async () => {
       const res = await save(patient, doctor, ['summary']); assert.equal(res.statusCode, 200);
       grant = res.json().value; assert.equal(grant.version, 1);

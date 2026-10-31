@@ -114,3 +114,12 @@ export async function readPatient(doctorId: string, patientId: string, scope: 's
     return { ...pageResult(rows, p.limit), patient };
   });
 }
+
+export async function resolveDoctorRecipient(input: unknown) {
+  const { doctorId } = z.object({ doctorId: id }).strict().parse(input);
+  const doctor = await prisma.user.findFirst({ where: { id: doctorId, role: 'doctor', status: 'active',
+    doctorApproval: { is: { revokedAt: null, approvedAt: { lte: new Date() } } } },
+    select: { id: true, username: true } });
+  if (!doctor) fail(404, 'RECIPIENT_NOT_FOUND');
+  return { result: 'OK', value: { ...doctor, clinicalApproved: true } };
+}

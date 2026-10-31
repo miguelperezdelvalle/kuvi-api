@@ -6,6 +6,11 @@ import { listGrantedPatients, paramsSchema, readPatient } from '../clinical-acce
 export const doctorRoutes: FastifyPluginAsync = async app => {
   app.setErrorHandler(clinicalAccessErrors);
   app.addHook('onRequest', async (_request, reply) => { reply.header('Cache-Control', 'no-store'); });
+  app.get('/me', async (request, reply) => {
+    const doctor = await requireRole(request, reply, 'doctor'); if (!doctor) return;
+    return { result: 'OK', user: { id: doctor.id, username: doctor.username,
+      role: 'doctor', clinicalApproved: true } };
+  });
   app.get('/patients', async (request, reply) => {
     const doctor = await requireRole(request, reply, 'doctor'); if (!doctor) return;
     return listGrantedPatients(doctor.id, request.query);

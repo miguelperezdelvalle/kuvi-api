@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../../infrastructure/db/prisma.js';
 import { requireRole } from '../../shared/auth/current-user.js';
 import { clinicalAccessErrors } from '../clinical-access/clinical-access.errors.js';
-import { listOwnGrants, paramsSchema, revokeGrant, saveGrant } from '../clinical-access/clinical-access.service.js';
+import { listOwnGrants, paramsSchema, revokeGrant, saveGrant, resolveDoctorRecipient } from '../clinical-access/clinical-access.service.js';
 
 const createShareSchema = z.object({
   label: z.string().trim().min(1).max(100),
@@ -15,6 +15,10 @@ const createShareSchema = z.object({
 export const sharingRoutes: FastifyPluginAsync = async (app) => {
   app.setErrorHandler(clinicalAccessErrors);
   app.addHook('onRequest', async (_request, reply) => { reply.header('Cache-Control', 'no-store'); });
+  app.post('/doctor-grants/recipient', async (request, reply) => {
+    const patient = await requireRole(request, reply, 'patient'); if (!patient) return;
+    return resolveDoctorRecipient(request.body);
+  });
   app.get('/doctor-grants', async (request, reply) => {
     const patient = await requireRole(request, reply, 'patient'); if (!patient) return;
     return listOwnGrants(patient.id, request.query);
