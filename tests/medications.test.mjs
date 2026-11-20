@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
 import { prisma } from '../dist/infrastructure/db/prisma.js';
@@ -101,6 +101,58 @@ test('medication persistence and synchronization', async t => {
     await t.test('failed imports roll back product, treatment, ledger and operation', async () => {
       await assert.rejects(apply(save('rollback', { legacyIntakes: [{ id: 'old-intake', occurredAt: now(), legacySlotIndex: null }] })));
       assert.equal((await getMedicationSnapshot(user.id)).medications.some(m => m.id === 'rollback'), false);
+    });
+    await t.test('imported medicines expose current prescription status across devices and isolate owners', async () => {
+      const appointmentId = randomUUID(), prescriptionId = randomUUID(), itemId = randomUUID();
+      const medicationId = 'rx_' + createHash('sha256')
+        .update(JSON.stringify([appointmentId, prescriptionId, itemId])).digest('hex');
+      await prisma.appointment.create({ data: {
+        userId: user.id, id: appointmentId, doctorId: doctor.id, doctorName: 'Synthetic doctor',
+        specialty: 'General', start: new Date(), end: new Date(Date.now() + 1800000),
+        timezone: 'America/Mexico_City', location: 'Synthetic test',
+      } });
+      await prisma.prescription.create({ data: {
+        userId: user.id, id: prescriptionId, appointmentId, doctorId: doctor.id,
+        doctorName: 'Synthetic doctor', instructions: 'Synthetic instructions',
+        items: [{ id: itemId }],
+      } });
+      await apply(save(medicationId));
+      await apply(save(medicationId), randomUUID(), other.id);
+      const medication = async who =>
+        (await getMedicationSnapshot(who)).medications.find(m => m.id === medicationId);
+      const active = await medication(user.id);
+      assert.equal(active.prescriptionSource.status, 'active');
+      assert.equal(active.prescriptionSource.appointmentId, appointmentId);
+      assert.equal(active.prescriptionSource.prescriptionId, prescriptionId);
+      assert.ok(Number.isFinite(Date.parse(active.prescriptionSource.checkedAt)));
+      assert.equal((await medication(other.id)).prescriptionSource, null);
+
+      await prisma.prescription.update({
+        where: { userId_id: { userId: user.id, id: prescriptionId } },
+        data: { revokedAt: new Date(), revocationReason: 'Synthetic revocation' },
+      });
+      assert.equal((await medication(user.id)).prescriptionSource.status, 'revoked');
+      await prisma.prescription.create({ data: {
+        userId: user.id, id: randomUUID(), appointmentId, doctorId: doctor.id,
+        doctorName: 'Synthetic doctor', instructions: '', items: [{ id: randomUUID() }],
+        supersedesId: prescriptionId,
+      } });
+      const replaced = await medication(user.id);
+      assert.equal(replaced.prescriptionSource.status, 'replaced');
+      assert.equal(replaced.stock.toString(), active.stock.toString());
+      assert.equal(replaced.version, active.version);
+      assert.equal(replaced.treatment.status, active.treatment.status);
+      const manual = (await getMedicationSnapshot(user.id)).medications.find(m => m.id === 'daily');
+      assert.equal(manual.prescriptionSource, null);
+      const response = await app.inject({
+        url: '/medications/me',
+        headers: { authorization: `Bearer ${app.jwt.sign({ sub: user.id })}` },
+      });
+      assert.equal(response.statusCode, 200);
+      const exported = response.json().medications.find(m => m.id === medicationId).prescriptionSource;
+      assert.equal(exported.status, 'replaced');
+      assert.equal(exported.revocationReason, undefined);
+      assert.equal(exported.items, undefined);
     });
     await t.test('invalid units, duplicate hours and end dates are rejected', async () => {
       await assert.rejects(apply(save('bad', { treatment: { ...treatment, schedule: { ...treatment.schedule, times: [480,480] } } })), e => e.status === 400);

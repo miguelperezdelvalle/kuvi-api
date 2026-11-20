@@ -36,6 +36,23 @@ test('persistent sessions rotate, expire and revoke across instances', async t =
   const post = (path, refreshToken, server = app) => server.inject({ method: 'POST', url: `/auth/${path}`, payload: { refreshToken } });
   const me = (token, server = app) => server.inject({ url: '/users/me', headers: { authorization: `Bearer ${token}` } });
   try {
+    await t.test('registration rejects identity fields before creating a patient', async () => {
+      const before = await prisma.user.count();
+      for (const field of ['userName', 'secondName', 'lastName', 'firstName',
+        'fullName', 'name', 'nombre', 'nombres', 'apellidos']) {
+        const res = await app.inject({
+          method: 'POST', url: '/auth/register-patient',
+          payload: {
+            username: randomUUID().replaceAll('-', ''), password,
+            [field]: 'Synthetic private identity',
+          },
+        });
+        assert.equal(res.statusCode, 400);
+        assert.equal(res.json().code, 'PATIENT_IDENTITY_NOT_ALLOWED');
+        assert.equal(res.body.includes('Synthetic private identity'), false);
+      }
+      assert.equal(await prisma.user.count(), before);
+    });
     await t.test('patient registration persists a usable session and hashed refresh credential', async () => {
       const res = await app.inject({ method: 'POST', url: '/auth/register-patient', payload: {
         username: randomUUID().replaceAll('-', ''), password, role: 'doctor',

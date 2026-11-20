@@ -137,9 +137,45 @@ export async function applyMedicationOperation(userId: string, input: unknown) {
 }
 
 export async function getMedicationSnapshot(userId: string) {
-  return prisma.$transaction(async tx => ({ result: 'OK',
-    medications: await tx.medication.findMany({ where: { userId }, include: { treatment: true }, orderBy: { id: 'asc' } }),
-    intakes: await tx.medicationIntake.findMany({ where: { userId }, orderBy: { occurredAt: 'asc' } }),
-    movements: await tx.medicationStockMovement.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
-  }), { isolationLevel: 'RepeatableRead' });
+  return prisma.$transaction(async tx => {
+    const medications = await tx.medication.findMany({
+      where: { userId }, include: { treatment: true }, orderBy: { id: 'asc' },
+    });
+    const importedIds = new Set(medications.filter(m => m.id.startsWith('rx_')).map(m => m.id));
+    const sources = new Map<string, {
+      appointmentId: string; prescriptionId: string;
+      status: 'active' | 'revoked' | 'replaced';
+      revokedAt: string | null; checkedAt: string;
+    }>();
+    if (importedIds.size) {
+      const prescriptions = await tx.prescription.findMany({
+        where: { userId },
+        select: { id: true, appointmentId: true, items: true, revokedAt: true, supersedesId: true },
+      });
+      const replaced = new Set(prescriptions.map(p => p.supersedesId).filter(id => id !== null));
+      const checkedAt = new Date().toISOString();
+      for (const p of prescriptions) {
+        if (!Array.isArray(p.items)) continue;
+        for (const item of p.items) {
+          if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.id !== 'string') continue;
+          // Matches Flutter's import ID, including medications imported before
+          // prescription status was included in snapshots.
+          const id = 'rx_' + createHash('sha256')
+            .update(JSON.stringify([p.appointmentId, p.id, item.id])).digest('hex');
+          if (!importedIds.has(id)) continue;
+          sources.set(id, {
+            appointmentId: p.appointmentId, prescriptionId: p.id,
+            status: replaced.has(p.id) ? 'replaced' : p.revokedAt ? 'revoked' : 'active',
+            revokedAt: p.revokedAt?.toISOString() ?? null, checkedAt,
+          });
+        }
+      }
+    }
+    return {
+      result: 'OK',
+      medications: medications.map(m => ({ ...m, prescriptionSource: sources.get(m.id) ?? null })),
+      intakes: await tx.medicationIntake.findMany({ where: { userId }, orderBy: { occurredAt: 'asc' } }),
+      movements: await tx.medicationStockMovement.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+    };
+  }, { isolationLevel: 'RepeatableRead' });
 }

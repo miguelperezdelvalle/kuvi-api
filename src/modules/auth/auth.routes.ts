@@ -74,6 +74,17 @@ export const authRoutes: FastifyPluginAsync<Options> = async (app, options) => {
   });
 
   app.post('/register-patient', async (request, reply) => {
+    const identityFields = new Set([
+      'userName', 'secondName', 'lastName', 'firstName', 'fullName',
+      'name', 'nombre', 'nombres', 'apellidos',
+    ]);
+    if (request.body && typeof request.body === 'object' &&
+        Object.keys(request.body).some(key => identityFields.has(key))) {
+      return reply.code(400).send({
+        result: 'KO', code: 'PATIENT_IDENTITY_NOT_ALLOWED',
+        message: 'Actualiza Kuvi para crear una cuenta con protección de identidad.',
+      });
+    }
     const body = registerSchema.parse(request.body);
 
     const existingUser = await prisma.user.findUnique({
