@@ -15,6 +15,7 @@
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
+    "test:documents": "node tests/run-documents.mjs",
     "test:medications": "node tests/run-medications.mjs",
     "test:appointments": "node tests/run-appointments.mjs",
     "test:physicians": "node tests/run-physicians.mjs",

@@ -1,3 +1,4 @@
+import { documentsRoutes } from '../modules/documents/documents.routes.js';
 import { medicationsRoutes } from '../modules/medications/medications.routes.js';
 import { appointmentsRoutes } from '../modules/appointments/appointments.routes.js';
 import { physiciansRoutes } from '../modules/physicians/physicians.routes.js';
@@ -19,6 +20,7 @@ import { doctorRoutes } from '../modules/doctor/doctor.routes.js';
 
 async function buildApp() {
   const app = Fastify({
+    requestTimeout: 120000,
     logger: {
       level: env.LOG_LEVEL,
       redact: { paths: ['req.headers.authorization', 'req.headers.cookie',
@@ -61,6 +63,7 @@ async function buildApp() {
   await app.register(summaryRoutes, { prefix: '/summary' });
   await app.register(doctorRoutes, { prefix: '/doctor' });
   await app.register(medicationsRoutes, { prefix: '/medications' });
+  await app.register(documentsRoutes, { prefix: '/documents' });
   await app.register(appointmentsRoutes, { prefix: '/appointments' });
   await app.register(physiciansRoutes, { prefix: '/physicians' });
   return app;

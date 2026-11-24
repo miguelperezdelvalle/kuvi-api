@@ -17,6 +17,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  documentBackups DocumentBackup[]
+  documentBackupVault DocumentBackupVault?
   medications Medication[]
   appointments Appointment[] @relation("AppointmentPatient")
   doctorAppointments Appointment[] @relation("AppointmentDoctor")
@@ -386,4 +388,21 @@ model MedicationOperation {
   result Json
   createdAt DateTime @default(now())
   @@id([userId, id])
+}
+
+model DocumentBackupVault {
+  userId String @id
+  vaultId String
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+model DocumentBackup {
+  userId String
+  documentId String
+  content Bytes
+  sha256 String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, documentId])
 }
