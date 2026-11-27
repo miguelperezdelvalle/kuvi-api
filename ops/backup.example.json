@@ -1,0 +1,15 @@
+{
+  "format": "kuvi-postgres-backup-config",
+  "version": 1,
+  "envFile": "/home/miguel/.config/kuvi-database/backup.env",
+  "pgDump": "/home/miguel/.local/lib/kuvi-pg16/pg_dump",
+  "pgRestore": "/home/miguel/.local/lib/kuvi-pg16/pg_restore",
+  "gpgHome": "/home/miguel/.config/kuvi-backup/public-keyring",
+  "recipient": "REPLACE_WITH_OPERATOR_PUBLIC_FINGERPRINT",
+  "outputDir": "/home/miguel/kuvi-postgres-backups",
+  "maxArchiveBytes": 2147483648,
+  "timeoutMs": 2700000,
+  "requiredBackupRole": "kuvi_backup",
+  "restoreEnvFile": "/home/miguel/.config/kuvi-database/restore.env",
+  "restoreOwner": "kuvi_restore_owner"
+}

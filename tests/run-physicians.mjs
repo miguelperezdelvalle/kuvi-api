@@ -16,7 +16,7 @@ try {
   for (const [command, args] of [
     ['node_modules/.bin/prisma', ['migrate', 'deploy']],
     ['node_modules/.bin/tsc', []],
-    [process.execPath, ['--test', 'tests/physicians.test.mjs', 'tests/appointments.test.mjs']],
+    [process.execPath, ['--test', '--test-concurrency=1', 'tests/physicians.test.mjs', 'tests/appointments.test.mjs']],
   ]) {
     const result = spawnSync(command, args, { env, stdio: 'inherit' });
     if (result.error) throw result.error;

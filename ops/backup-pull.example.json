@@ -1,0 +1,9 @@
+{
+  "format": "kuvi-backup-pull-config",
+  "version": 1,
+  "sshAlias": "kuvi-dev",
+  "remoteScript": "/home/miguel/kuvi-api/ops/backup.mjs",
+  "remoteConfig": "/home/miguel/.config/kuvi-backup/config.json",
+  "remoteDirectory": "/home/miguel/kuvi-postgres-backups",
+  "localDirectory": "C:\\Users\\migue\\Documents\\KuviBackups"
+}

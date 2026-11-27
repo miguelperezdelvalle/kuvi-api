@@ -1,0 +1,37 @@
+[Unit]
+Description=Kuvi backend (isolated runtime)
+After=network.target
+
+[Service]
+Type=simple
+User=kuvi-api
+Group=kuvi-api
+WorkingDirectory=/opt/kuvi-api/current
+EnvironmentFile=/etc/kuvi/backend.env
+ExecStartPre=/usr/bin/node --input-type=module -e "import {networkInterfaces} from 'node:os'; networkInterfaces();"
+ExecStart=/usr/bin/node /opt/kuvi-api/current/dist/app/server.js
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+InaccessiblePaths=-/run/docker.sock -/run/containerd
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
