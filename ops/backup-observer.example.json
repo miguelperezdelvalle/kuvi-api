@@ -1,0 +1,16 @@
+{
+  "format": "kuvi-backup-observer-config",
+  "version": 1,
+  "sourceIdentity": "REPLACE_WITH_VERIFIED_BACKUP_SOURCE_SHA256",
+  "pullConfigFile": "C:\\Users\\OPERATOR\\.kuvi-backup\\pull-config.json",
+  "pullStatusFile": "C:\\Users\\OPERATOR\\.kuvi-backup\\last-pull.json",
+  "remoteHealthScript": "/home/miguel/kuvi-api/ops/backup-health.mjs",
+  "requireNas": true,
+  "nasMode": "server-direct",
+  "requirePcCopy": false,
+  "maxBackupAgeHours": 36,
+  "maxPullAgeHours": 3,
+  "copyGraceHours": 2,
+  "maxNasPullAgeHours": 15,
+  "nasCopyGraceHours": 14
+}
